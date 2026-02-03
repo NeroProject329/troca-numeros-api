@@ -1,0 +1,14 @@
+import { NextFunction, Request, Response } from "express";
+import { ZodSchema } from "zod";
+import { badRequest } from "../utils/httpErrors";
+
+export function validate(schema: ZodSchema) {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return next(badRequest("Dados inválidos", parsed.error.flatten()));
+    }
+    req.body = parsed.data;
+    next();
+  };
+}
