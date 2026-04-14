@@ -59,11 +59,26 @@ export const domainRepo = {
     return DomainModel.findByIdAndUpdate(domainId, update, { new: true });
   },
 
-  setActiveNumber(domainId: string, numberId: string | null) {
+    setActiveNumber(domainId: string, numberId: string | null) {
     return DomainModel.findByIdAndUpdate(
       domainId,
       { $set: { activeNumberId: numberId } },
       { new: true }
+    );
+  },
+
+  removeNumberFromAllDomains(numberId: string) {
+    return DomainModel.updateMany(
+      {
+        $or: [
+          { numbers: numberId },
+          { activeNumberId: numberId },
+        ],
+      },
+      {
+        $pull: { numbers: numberId },
+        $unset: { activeNumberId: "" },
+      }
     );
   },
 };
