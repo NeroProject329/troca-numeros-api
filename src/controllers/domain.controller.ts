@@ -60,9 +60,16 @@ export const domainsController = {
     }
   },
 
-  async unlinkNumber(req: Request<DomainUnlinkParams>, res: Response, next: NextFunction) {
+  async unlinkNumber(
+    req: Request<DomainUnlinkParams>,
+    res: Response,
+    next: NextFunction
+  ) {
     try {
-      const updated = await domainService.unlinkNumber(req.params.id, req.params.numberId);
+      const updated = await domainService.unlinkNumber(
+        req.params.id,
+        req.params.numberId
+      );
       res.json({ ok: true, item: updated });
     } catch (e) {
       next(e);

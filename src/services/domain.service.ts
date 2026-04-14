@@ -26,36 +26,46 @@ export const domainService = {
     return updated;
   },
 
-  // ✅ detalhe do domínio: números vinculados + domínios onde cada número está ativo
   async getDetail(id: string) {
     const domain = await domainRepo.findById(id);
     if (!domain) throw notFound("Domínio não encontrado");
 
-    // IDs dos números vinculados
     const numberIds = (domain.numbers as any[]).map((n) => String(n._id));
 
-    // busca todos domínios que estão com activeNumberId em algum desses números
-    const activeDomains = await DomainModel.find({
-      activeNumberId: { $in: numberIds.map((x) => new mongoose.Types.ObjectId(x)) },
-    }).select({ domain: 1, activeNumberId: 1 });
+    const activeDomains =
+      numberIds.length > 0
+        ? await DomainModel.find({
+            activeNumberId: {
+              $in: numberIds.map((x) => new mongoose.Types.ObjectId(x)),
+            },
+          }).select({ domain: 1, activeNumberId: 1 })
+        : [];
 
-    // monta map: numberId -> [{id, domain}]
     const map = new Map<string, Array<{ id: string; domain: string }>>();
+
     for (const d of activeDomains) {
       const nId = String(d.activeNumberId);
       const arr = map.get(nId) ?? [];
-      arr.push({ id: String(d._id), domain: d.domain });
+      arr.push({
+        id: String(d._id),
+        domain: d.domain,
+      });
       map.set(nId, arr);
     }
 
+    const currentActiveId = domain.activeNumberId
+      ? String((domain.activeNumberId as any)._id ?? domain.activeNumberId)
+      : null;
+
     const numbers = (domain.numbers as any[]).map((n) => {
-      const activeInDomains = map.get(String(n._id)) ?? [];
+      const nId = String(n._id);
+
       return {
-        id: String(n._id),
+        id: nId,
         name: n.name,
         phone: n.phone,
-        isActiveHere: domain.activeNumberId ? String(domain.activeNumberId?._id ?? domain.activeNumberId) === String(n._id) : false,
-        activeInDomains, // inclui outros domínios onde ele está ativo
+        isActiveHere: currentActiveId === nId,
+        activeInDomains: map.get(nId) ?? [],
       };
     });
 
@@ -63,7 +73,7 @@ export const domainService = {
       id: String(domain._id),
       domain: domain.domain,
       isActive: domain.isActive,
-      activeNumberId: domain.activeNumberId ? String((domain.activeNumberId as any)._id ?? domain.activeNumberId) : null,
+      activeNumberId: currentActiveId,
       numbers,
     };
   },
@@ -74,29 +84,39 @@ export const domainService = {
 
     const updated = await domainRepo.addNumber(domainId, numberId);
     if (!updated) throw notFound("Domínio não encontrado");
+
     return updated;
   },
 
   async unlinkNumber(domainId: string, numberId: string) {
     const updated = await domainRepo.removeNumber(domainId, numberId);
     if (!updated) throw notFound("Domínio não encontrado");
+
     return updated;
   },
 
   async setActiveNumber(domainId: string, numberId: string | null) {
-    // se setar um número, valida se ele está vinculado ao domínio
-    if (numberId) {
-      const domain = await domainRepo.findById(domainId);
-      if (!domain) throw notFound("Domínio não encontrado");
+    const domain = await domainRepo.findById(domainId);
+    if (!domain) throw notFound("Domínio não encontrado");
 
-      const linkedIds = (domain.numbers as any[]).map((n) => String(n._id));
-      if (!linkedIds.includes(String(numberId))) {
-        throw badRequest("Esse número não está vinculado a este domínio");
-      }
+    if (numberId === null) {
+      const updated = await domainRepo.setActiveNumber(domainId, null);
+      if (!updated) throw notFound("Domínio não encontrado");
+      return updated;
     }
 
+    const linkedIds = (domain.numbers as any[]).map((n) => String(n._id));
+
+    if (!linkedIds.includes(String(numberId))) {
+      throw badRequest("Esse número não está vinculado a este domínio");
+    }
+
+    // importante:
+    // aqui a ativação vale somente para este domínio.
+    // o mesmo número pode continuar ativo em outros domínios também.
     const updated = await domainRepo.setActiveNumber(domainId, numberId);
     if (!updated) throw notFound("Domínio não encontrado");
+
     return updated;
   },
 };
