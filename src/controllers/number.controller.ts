@@ -24,7 +24,7 @@ export const numbersController = {
 
   async patch(req: Request<NumberIdParams>, res: Response, next: NextFunction) {
     try {
-      const updated = await numberService.update(req.params.id, req.body);
+      const updated = await numberService.patch(req.params.id, req.body);
       res.json({ ok: true, item: updated });
     } catch (e) {
       next(e);
