@@ -2,6 +2,7 @@ import { numberRepo } from "../repositories/number.repo";
 import { domainRepo } from "../repositories/domain.repo";
 import { normalizePhone } from "../utils/normalizePhone";
 import { badRequest, notFound } from "../utils/httpErrors";
+import { DomainModel } from "../models/Domain";
 
 export const numberService = {
   list() {
@@ -15,7 +16,9 @@ export const numberService = {
     if (!name) throw badRequest("Nome inválido");
     if (!phone) throw badRequest("Telefone inválido");
 
-    return numberRepo.create({ name, phone });
+    const number = await numberRepo.create({ name, phone });
+    await DomainModel.updateMany({}, { $addToSet: { numbers: number._id } });
+    return number;
   },
 
   async patch(id: string, data: { name?: string; phone?: string }) {

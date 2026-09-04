@@ -4,6 +4,7 @@ import { numberRepo } from "../repositories/number.repo";
 import { normalizeDomain } from "../utils/normalizeDomain";
 import { badRequest, notFound } from "../utils/httpErrors";
 import { DomainModel } from "../models/Domain";
+import { NumberModel } from "../models/Number";
 
 export const domainService = {
   list() {
@@ -17,7 +18,32 @@ export const domainService = {
   async create(data: { domain: string }) {
     const domain = normalizeDomain(data.domain);
     if (!domain) throw badRequest("Domínio inválido");
-    return domainRepo.create({ domain });
+    const numbers = await NumberModel.find().select("_id").lean();
+    return domainRepo.create({ domain, numbers: numbers.map((number) => number._id) });
+  },
+
+  async linkAllNumbers(domainId: string) {
+    const numbers = await NumberModel.find().select("_id").lean();
+    const updated = await DomainModel.findByIdAndUpdate(domainId,
+      { $addToSet: { numbers: { $each: numbers.map((number) => number._id) } } }, { new: true });
+    if (!updated) throw notFound("Domínio não encontrado");
+    return updated;
+  },
+
+  async bulkActive(domainIds: string[], numberId: string, active: boolean) {
+    const ids = [...new Set(domainIds)];
+    const number = await numberRepo.findById(numberId);
+    if (!number) throw notFound("Número não encontrado");
+    const domains = await DomainModel.find({ _id: { $in: ids }, isActive: true }).select("_id").lean();
+    if (domains.length !== ids.length) throw badRequest("Um dos domínios está inativo ou não existe. Atualize a lista.");
+    const result = active
+      ? await DomainModel.updateMany({ _id: { $in: ids }, isActive: true }, {
+          $addToSet: { numbers: number._id }, $set: { activeNumberId: number._id },
+        })
+      : await DomainModel.updateMany({ _id: { $in: ids }, isActive: true, activeNumberId: number._id }, {
+          $set: { activeNumberId: null },
+        });
+    return { selectedCount: ids.length, matchedCount: result.matchedCount, modifiedCount: result.modifiedCount };
   },
 
   async patch(id: string, data: { isActive?: boolean }) {

@@ -1,4 +1,5 @@
 import { DomainModel } from "../models/Domain";
+import { Types } from "mongoose";
 
 export const domainRepo = {
   list() {
@@ -7,15 +8,17 @@ export const domainRepo = {
 
   listActiveForDashboard() {
     return DomainModel.find({ isActive: true })
-      .populate("activeNumberId")
-      .sort({ createdAt: -1 });
+      .select("domain isActive activeNumberId createdAt updatedAt")
+      .populate("activeNumberId", "name phone")
+      .sort({ createdAt: -1 })
+      .lean();
   },
 
-  create(data: { domain: string }) {
+  create(data: { domain: string; numbers?: Types.ObjectId[] }) {
     return DomainModel.create({
       domain: data.domain,
       isActive: true,
-      numbers: [],
+      numbers: data.numbers ?? [],
       activeNumberId: null,
     });
   },
@@ -68,6 +71,7 @@ export const domainRepo = {
   },
 
   removeNumberFromAllDomains(numberId: string) {
+    const id = new Types.ObjectId(numberId);
     return DomainModel.updateMany(
       {
         $or: [
@@ -75,10 +79,11 @@ export const domainRepo = {
           { activeNumberId: numberId },
         ],
       },
-      {
-        $pull: { numbers: numberId },
-        $unset: { activeNumberId: "" },
-      }
+      [{ $set: {
+        numbers: { $filter: { input: { $ifNull: ["$numbers", []] }, as: "number", cond: { $ne: ["$$number", id] } } },
+        activeNumberId: { $cond: [{ $eq: ["$activeNumberId", id] }, null, { $ifNull: ["$activeNumberId", null] }] },
+      } }],
+      { updatePipeline: true }
     );
   },
 };
